@@ -1,0 +1,149 @@
+{
+  "notes": "Expected statuses assume the locker evidence listed for each point. Outcomes use the rule that one NEEDS_REVIEW holds the whole letter.",
+  "letters": [
+    {
+      "letter": "letter_01.pdf",
+      "format": "Numbered list, digital PDF",
+      "quality": "clean",
+      "query_points": [
+        {
+          "id": 1,
+          "requirement": "Discharge summary signed and stamped by treating doctor",
+          "document_type": "discharge_summary",
+          "additional_condition": "Doctor's signature and stamp required",
+          "locker_evidence": "Discharge summary with visible doctor's signature and hospital stamp",
+          "expected_status": "COVERED"
+        },
+        {
+          "id": 2,
+          "requirement": "Itemised final hospital bill with room, OT and consumable breakup",
+          "document_type": "hospital_bill",
+          "additional_condition": "Must be itemised",
+          "locker_evidence": "Summary bill only, one lump-sum amount",
+          "expected_status": "NEEDS_FROM_PATIENT"
+        },
+        {
+          "id": 3,
+          "requirement": "Pre-operative ultrasound report of abdomen",
+          "document_type": "investigation_report",
+          "additional_condition": null,
+          "locker_evidence": "USG abdomen report dated 12/09/2026",
+          "expected_status": "COVERED"
+        },
+        {
+          "id": 4,
+          "requirement": "Date on which symptoms first started",
+          "document_type": "clarification",
+          "additional_condition": null,
+          "locker_evidence": "Not stated in any document",
+          "expected_status": "NEEDS_FROM_PATIENT"
+        }
+      ],
+      "expected_outcome": "SEND_MISSING_ITEMS_MESSAGE"
+    },
+    {
+      "letter": "letter_02.pdf",
+      "format": "Paragraphs with compound requests, digital PDF",
+      "quality": "clean",
+      "query_points": [
+        {
+          "id": 1,
+          "requirement": "Discharge summary",
+          "document_type": "discharge_summary",
+          "additional_condition": null,
+          "locker_evidence": "Discharge summary present",
+          "expected_status": "COVERED"
+        },
+        {
+          "id": 2,
+          "requirement": "Indoor case papers",
+          "document_type": "other",
+          "additional_condition": null,
+          "locker_evidence": "Not in locker",
+          "expected_status": "NEEDS_FROM_PATIENT"
+        },
+        {
+          "id": 3,
+          "requirement": "NS1 antigen report",
+          "document_type": "investigation_report",
+          "additional_condition": null,
+          "locker_evidence": "NS1 antigen positive report dated 02/10/2026",
+          "expected_status": "COVERED"
+        },
+        {
+          "id": 4,
+          "requirement": "Serial platelet counts for the hospitalisation period",
+          "document_type": "investigation_report",
+          "additional_condition": "Serial values for the stay",
+          "locker_evidence": "One CBC dated 02/10/2026 only; unclear if other counts exist",
+          "expected_status": "NEEDS_REVIEW"
+        },
+        {
+          "id": 5,
+          "requirement": "Pharmacy bills",
+          "document_type": "pharmacy_bill",
+          "additional_condition": null,
+          "locker_evidence": "Three pharmacy bills present",
+          "expected_status": "COVERED"
+        },
+        {
+          "id": 6,
+          "requirement": "Corresponding prescriptions from treating doctor",
+          "document_type": "consultation_paper",
+          "additional_condition": "Must match the pharmacy bills",
+          "locker_evidence": "No prescriptions in locker",
+          "expected_status": "NEEDS_FROM_PATIENT"
+        },
+        {
+          "id": 7,
+          "requirement": "Written confirmation of any other health policy",
+          "document_type": "clarification",
+          "additional_condition": null,
+          "locker_evidence": "Not stated in any document",
+          "expected_status": "NEEDS_FROM_PATIENT"
+        }
+      ],
+      "expected_outcome": "HOLD_FOR_STAFF_REVIEW"
+    },
+    {
+      "letter": "letter_03.pdf",
+      "format": "Table, all requirements already covered",
+      "quality": "clean",
+      "query_points": [
+        {
+          "id": 1,
+          "requirement": "Discharge summary showing diagnosis and surgery",
+          "document_type": "discharge_summary",
+          "additional_condition": null,
+          "locker_evidence": "Discharge summary with cataract surgery details",
+          "expected_status": "COVERED"
+        },
+        {
+          "id": 2,
+          "requirement": "Intraocular lens invoice with lens model",
+          "document_type": "hospital_bill",
+          "additional_condition": "Lens model required",
+          "locker_evidence": "Lens invoice naming the model",
+          "expected_status": "COVERED"
+        },
+        {
+          "id": 3,
+          "requirement": "A-scan biometry report, left eye",
+          "document_type": "investigation_report",
+          "additional_condition": null,
+          "locker_evidence": "A-scan report, left eye",
+          "expected_status": "COVERED"
+        },
+        {
+          "id": 4,
+          "requirement": "Policy copy, current year",
+          "document_type": "policy_copy",
+          "additional_condition": "Current policy year",
+          "locker_evidence": "Policy schedule for the current year",
+          "expected_status": "COVERED"
+        }
+      ],
+      "expected_outcome": "NO_ADDITIONAL_DOCUMENTS_REQUIRED"
+    }
+  ]
+}

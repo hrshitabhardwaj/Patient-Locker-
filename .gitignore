@@ -1,0 +1,32 @@
+# Secrets and local config
+.env
+.env.*
+!.env.example
+
+# Patient files — never commit
+storage/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Evaluation outputs (may contain patient text)
+eval/reports/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+demo/
+e2e-screenshots/

@@ -1,0 +1,151 @@
+{
+  "_note": "Expected answers for the fictional letters. Each point: requirement type and the condition codes it must carry. Letter 06 is held out: written separately and not used when adjusting the rules. Types follow the company's dev answer key: indoor case papers are 'other', lens/implant invoices are 'hospital_bill', and 'X including A and B' gives separate points for A and B.",
+  "01_numbered_brief_example.txt": {
+    "identity": "match",
+    "points": [
+      {
+        "type": "discharge_summary",
+        "conditions": [
+          "signed_by_doctor"
+        ]
+      },
+      {
+        "type": "pharmacy_bill",
+        "conditions": [
+          "itemised"
+        ]
+      },
+      {
+        "type": "clarification",
+        "conditions": []
+      }
+    ]
+  },
+  "02_numbered_compound.txt": {
+    "identity": "match",
+    "points": [
+      {
+        "type": "discharge_summary",
+        "conditions": [
+          "signed",
+          "stamped"
+        ]
+      },
+      {
+        "type": "hospital_bill",
+        "conditions": [
+          "signed",
+          "stamped"
+        ]
+      },
+      {
+        "type": "investigation_report",
+        "conditions": []
+      },
+      {
+        "type": "investigation_report",
+        "conditions": []
+      },
+      {
+        "type": "pharmacy_bill",
+        "conditions": []
+      },
+      {
+        "type": "consultation_paper",
+        "conditions": []
+      },
+      {
+        "type": "clarification",
+        "conditions": []
+      }
+    ]
+  },
+  "03_prose_paragraph.txt": {
+    "identity": "match",
+    "points": [
+      {
+        "type": "discharge_summary",
+        "conditions": [
+          "original",
+          "signed_by_doctor"
+        ]
+      },
+      {
+        "type": "pharmacy_bill",
+        "conditions": [
+          "itemised"
+        ]
+      },
+      {
+        "type": "policy_copy",
+        "conditions": []
+      },
+      {
+        "type": "clarification",
+        "conditions": []
+      }
+    ]
+  },
+  "04_lettered_kyc.txt": {
+    "identity": "match",
+    "points": [
+      {
+        "type": "kyc_document",
+        "conditions": [
+          "attested"
+        ]
+      },
+      {
+        "type": "other",
+        "conditions": []
+      },
+      {
+        "type": "health_card",
+        "conditions": []
+      },
+      {
+        "type": "consultation_paper",
+        "conditions": []
+      }
+    ]
+  },
+  "05_identity_mismatch.txt": {
+    "identity": "mismatch",
+    "points": [
+      {
+        "type": "discharge_summary",
+        "conditions": []
+      }
+    ]
+  },
+  "06_holdout_bullets.txt": {
+    "identity": "match",
+    "points": [
+      {
+        "type": "other",
+        "conditions": []
+      },
+      {
+        "type": "hospital_bill",
+        "conditions": [
+          "shows_identifier"
+        ]
+      },
+      {
+        "type": "hospital_bill",
+        "conditions": [
+          "covers_period",
+          "itemised"
+        ]
+      },
+      {
+        "type": "clarification",
+        "conditions": []
+      },
+      {
+        "type": "other",
+        "conditions": []
+      }
+    ]
+  }
+}
