@@ -81,6 +81,11 @@ def create_app() -> FastAPI:
     async def service_error_handler(request: Request, exc: ServiceError) -> JSONResponse:
         return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
 
+    # So visiting the bare API address explains itself instead of returning 404.
+    @app.get("/", include_in_schema=False)
+    def root() -> dict[str, str]:
+        return {"service": "Patient Locker API", "health": "/api/v1/health"}
+
     app.include_router(api_router, prefix="/api/v1")
     return app
 

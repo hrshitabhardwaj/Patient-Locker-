@@ -107,6 +107,16 @@ class Settings(BaseSettings):
     # A running job not finished within this time is assumed lost and is retried.
     job_lease_minutes: int = 20
 
+    @field_validator("database_url")
+    @classmethod
+    def _use_psycopg_driver(cls, value: str) -> str:
+        # Render and most hosts hand out postgres:// or postgresql:// URLs, which SQLAlchemy
+        # maps to psycopg2. The installed driver is psycopg 3.
+        for scheme in ("postgres://", "postgresql://"):
+            if value.startswith(scheme):
+                return "postgresql+psycopg://" + value.removeprefix(scheme)
+        return value
+
     @field_validator("file_encryption_key")
     @classmethod
     def _encryption_key_shape(cls, value: SecretStr) -> SecretStr:

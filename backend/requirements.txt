@@ -1,0 +1,3 @@
+# Render installs from requirements.txt by default. The real dependency list is in
+# pyproject.toml; this installs the project with exactly those dependencies.
+-e .

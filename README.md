@@ -280,10 +280,51 @@ All settings come from environment variables (see `.env.example`). The API refus
 start if a required secret is missing or invalid. `.env` and `storage/` (patient files)
 are git-ignored and must never be committed.
 
+## Deployment (Render + Vercel)
+
+**API — Render web service** (settings recorded in `render.yaml`):
+
+| Setting | Value |
+|---|---|
+| Root directory | `backend` |
+| Build command | `pip install -r requirements.txt` |
+| Start command | `sh scripts/render_start.sh` (migrates, starts the worker, then the API) |
+| Health check path | `/api/v1/health` |
+| Python | 3.12 (from `backend/.python-version`) |
+
+Environment: `APP_ENV=production`, `DATABASE_URL` (the Render Postgres internal URL, used
+as is), `FILE_ENCRYPTION_KEY` (32 random bytes, URL-safe base64; never change it once files
+exist), `CORS_ORIGINS=https://patient-locker.vercel.app`, `LLM_PROVIDER=none`, and the
+`COMPANY_NAME` / `SUPPORT_EMAIL` / `SUPPORT_PHONE` used in patient messages.
+
+`/api/v1/health` returns `{"status":"ok","database":"ok"}` only when the database is
+reachable *and* at the latest migration; otherwise 503 with `unavailable` or
+`migrations_pending`.
+
+Limits of the hosted setup:
+- Uploaded files are kept on the service's disk. Attach a Render persistent disk (paid plan)
+  and set `STORAGE_DIR` to it, or files are lost on each deploy or restart.
+- Tesseract is not installed in Render's Python runtime, so scanned pages cannot be OCR'd
+  there; PDFs with a text layer are unaffected.
+
+First admin, from your machine against the Render database's *external* URL:
+
+```bash
+cd backend
+DATABASE_URL='<external database URL>' FILE_ENCRYPTION_KEY='<same key as Render>' \
+  .venv/bin/python -m scripts.create_admin --email you@clinic.com --name "Full Name"
+```
+
+**Portal — Vercel** (root directory `frontend`, settings in `frontend/vercel.json`): builds
+with `npm run build` into `dist`. `/api/*` is forwarded to the Render API, so the portal and
+API share one origin and the session cookie stays first-party; every other path serves the
+app so links and page refreshes work.
+
 ## API so far
 
 | Method | Path | Who |
 |---|---|---|
+| GET | `/` | Public (points to the health check) |
 | GET | `/api/v1/health` | Public |
 | POST | `/api/v1/auth/login` | Public |
 | POST | `/api/v1/auth/logout` | Signed in |

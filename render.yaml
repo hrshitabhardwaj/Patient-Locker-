@@ -1,0 +1,45 @@
+# Render Blueprint for the API. The existing service was created in the dashboard; keep
+# its settings in step with this file (or apply it via Blueprints → New Blueprint Instance).
+services:
+  - type: web
+    name: patient-locker-backend
+    runtime: python
+    rootDir: backend
+    # Python version comes from backend/.python-version.
+    buildCommand: pip install -r requirements.txt
+    # Applies migrations, starts the job worker, then the API.
+    startCommand: sh scripts/render_start.sh
+    healthCheckPath: /api/v1/health
+    plan: free
+    # Uploaded documents are stored (encrypted) on local disk. Without a persistent disk
+    # they are lost on every deploy and restart. A disk needs a paid plan:
+    # disk:
+    #   name: patient-files
+    #   mountPath: /var/data
+    #   sizeGB: 1
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: PUBLIC_BASE_URL
+        value: https://patient-locker-backend.onrender.com
+      - key: CORS_ORIGINS
+        value: https://patient-locker.vercel.app
+      # The Render Postgres "Internal Database URL" (postgresql://... is accepted as is).
+      - key: DATABASE_URL
+        sync: false
+      # Generate once with: python -c "import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
+      # Never change it afterwards: stored files can only be read with the same key.
+      - key: FILE_ENCRYPTION_KEY
+        sync: false
+      # Set to /var/data/storage once the disk above is attached.
+      - key: STORAGE_DIR
+        value: storage
+      # Ollama only runs locally; documents are still extracted and classified by rules.
+      - key: LLM_PROVIDER
+        value: none
+      - key: COMPANY_NAME
+        sync: false
+      - key: SUPPORT_EMAIL
+        sync: false
+      - key: SUPPORT_PHONE
+        sync: false

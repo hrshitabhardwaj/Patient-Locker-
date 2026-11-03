@@ -20,6 +20,7 @@ htmlcov/
 # Node
 node_modules/
 frontend/dist/
+.vercel/
 
 # Evaluation outputs (may contain patient text)
 eval/reports/
