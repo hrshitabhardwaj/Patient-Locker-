@@ -2,8 +2,8 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import OperationalError
 
-from app.api.v1 import health
 from app.core.config import Settings
+from app.db import schema
 from app.db.session import get_db
 from app.main import create_app
 
@@ -34,7 +34,7 @@ def test_health_returns_503_when_database_is_down():
 
 def test_health_returns_503_when_migrations_are_pending(monkeypatch):
     # The test database is at the latest migration; pretend a newer one exists.
-    monkeypatch.setattr(health, "latest_migration", lambda: "not-yet-applied")
+    monkeypatch.setattr(schema, "latest_migration", lambda: "not-yet-applied")
     client = TestClient(create_app())
 
     response = client.get("/api/v1/health")

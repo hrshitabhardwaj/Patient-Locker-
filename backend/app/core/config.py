@@ -12,6 +12,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 ROOT_DIR = Path(__file__).resolve().parents[3]
 
 
+def psycopg_url(url: str) -> str:
+    """Render and most hosts hand out postgres:// or postgresql:// URLs, which SQLAlchemy
+    maps to psycopg2. The installed driver is psycopg 3."""
+    for scheme in ("postgres://", "postgresql://"):
+        if url.startswith(scheme):
+            return "postgresql+psycopg://" + url.removeprefix(scheme)
+    return url
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=ROOT_DIR / ".env",
@@ -110,12 +119,7 @@ class Settings(BaseSettings):
     @field_validator("database_url")
     @classmethod
     def _use_psycopg_driver(cls, value: str) -> str:
-        # Render and most hosts hand out postgres:// or postgresql:// URLs, which SQLAlchemy
-        # maps to psycopg2. The installed driver is psycopg 3.
-        for scheme in ("postgres://", "postgresql://"):
-            if value.startswith(scheme):
-                return "postgresql+psycopg://" + value.removeprefix(scheme)
-        return value
+        return psycopg_url(value)
 
     @field_validator("file_encryption_key")
     @classmethod

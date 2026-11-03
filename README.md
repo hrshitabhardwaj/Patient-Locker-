@@ -56,15 +56,62 @@ make setup
 
 ## First admin account
 
-There is no public sign-up. Create the first administrator from the command line; it
-prompts for a password (at least 12 characters, mixing letters with digits or symbols):
+There is no public sign-up and no default password. The first administrator is created
+from the command line with `scripts/create_admin.py`, which:
+
+- connects only to the database you name: `DATABASE_URL` from the environment, or `--local`
+  for the one in `.env` (it never falls back to `.env` on its own);
+- shows which database it is about to change and asks you to confirm;
+- checks the database is reachable and fully migrated before asking for anything;
+- refuses if an active administrator already exists, or if the email is already in use;
+- asks for the password twice without showing it (at least 12 characters, letters mixed
+  with digits or symbols, not containing the email name) and stores only its Argon2 hash.
+
+**Local database:**
 
 ```bash
 make create-admin EMAIL=you@clinic.com NAME="Your Name"
 ```
 
-Admins then create other staff in the API (`POST /api/v1/users`). Each new account gets a
-one-time temporary password that must be changed at first sign-in.
+**Production (Render), from your own machine:**
+
+1. Deploy the API first and check https://patient-locker-backend.onrender.com/api/v1/health
+   shows `{"status":"ok","database":"ok"}` (the start command creates the tables).
+2. In Render, open the PostgreSQL database → **Connect** → copy the **External Database
+   URL**. It contains the database password: don't paste it into chats, files or commits.
+   External connections are encrypted (SSL). Under the database's **Access Control** you
+   can limit which IP addresses may connect.
+3. In a terminal (zsh, the macOS default), paste the URL at a hidden prompt so it stays
+   out of your shell history, then run the command:
+
+   ```bash
+   cd backend
+   read -rs 'DATABASE_URL?Paste the External Database URL: ' && export DATABASE_URL
+   .venv/bin/python -m scripts.create_admin
+   unset DATABASE_URL
+   ```
+
+   (In bash the first line is `read -rsp 'Paste the External Database URL: ' DATABASE_URL && export DATABASE_URL`.)
+   It prints `Target: database '…' on ….render.com`, then asks you to confirm, and for the
+   email, full name and password.
+4. Success ends with `Administrator <email> created in database '…'`. To double-check,
+   run the command again: it answers `An administrator already exists` and changes nothing.
+5. Sign in at https://patient-locker.vercel.app with that email and password.
+
+**More staff accounts:** signed in as an administrator, open **Staff accounts**, fill in
+**Add a staff member** and choose the role. The portal shows a one-time temporary password;
+pass it to the person privately (not by email or chat in plain text). They must replace it
+at first sign-in. **Reset password** on the same page issues a new temporary password.
+
+**If an administrator already exists:** sign in as that administrator. A forgotten
+password is reset by another administrator from the Staff page. A locked account unlocks
+by itself after 15 minutes. If the only administrator can no longer sign in, deactivate
+that account directly in the database (accounts are never deleted, so the audit history
+is kept), then run the command again:
+
+```sql
+UPDATE users SET is_active = false WHERE email = 'old-admin@clinic.com';
+```
 
 ## Roles
 
@@ -307,13 +354,8 @@ Limits of the hosted setup:
 - Tesseract is not installed in Render's Python runtime, so scanned pages cannot be OCR'd
   there; PDFs with a text layer are unaffected.
 
-First admin, from your machine against the Render database's *external* URL:
-
-```bash
-cd backend
-DATABASE_URL='<external database URL>' FILE_ENCRYPTION_KEY='<same key as Render>' \
-  .venv/bin/python -m scripts.create_admin --email you@clinic.com --name "Full Name"
-```
+First admin: see [First admin account](#first-admin-account). The command runs on your
+machine against the database's External Database URL; it is never run during deployment.
 
 **Portal — Vercel** (root directory `frontend`, settings in `frontend/vercel.json`): builds
 with `npm run build` into `dist`. `/api/*` is forwarded to the Render API, so the portal and

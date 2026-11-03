@@ -70,10 +70,10 @@ eval-letters:
 lint:
 	cd backend && .venv/bin/ruff check app tests scripts e2e alembic/env.py
 
-## Create the first admin account (prompts for a password)
+## Create the first admin account in the local database (prompts for a password)
 create-admin:
 	@test -n "$(EMAIL)" -a -n "$(NAME)" || (echo 'usage: make create-admin EMAIL=you@clinic.com NAME="Full Name"'; exit 1)
-	cd backend && .venv/bin/python -m scripts.create_admin --email "$(EMAIL)" --name "$(NAME)"
+	cd backend && .venv/bin/python -m scripts.create_admin --local --email "$(EMAIL)" --name "$(NAME)"
 
 build-web:
 	cd frontend && npm run build
