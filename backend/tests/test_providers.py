@@ -136,3 +136,137 @@ def test_overlong_whatsapp_is_refused_before_sending(configured):
             to="+91", text="x" * 5000, reference="r"
         )
     assert seen == []
+
+
+# ---- SMTP (Gmail app password) and Brevo ----
+
+import smtplib  # noqa: E402
+
+from app.messaging.providers import BrevoEmail, SmtpEmail  # noqa: E402
+
+
+@pytest.fixture
+def email_configured(monkeypatch, configured):
+    settings = get_settings()
+    for name, value in {
+        "smtp_username": "claims.desk@gmail.example",
+        "smtp_password": SecretStr("app-password"),
+        "brevo_api_key": SecretStr("xkeysib-test"),
+    }.items():
+        monkeypatch.setattr(settings, name, value)
+
+
+class FakeSmtp:
+    def __init__(self, fail_with=None, refused=None):
+        self.fail_with = fail_with
+        self.refused = refused or {}
+        self.logins = []
+        self.sent = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def login(self, user, password):
+        self.logins.append((user, password))
+
+    def send_message(self, message):
+        if self.fail_with:
+            raise self.fail_with
+        self.sent.append(message)
+        return self.refused
+
+
+def test_smtp_sends_text_and_html(email_configured):
+    server = FakeSmtp()
+    provider = SmtpEmail(connect=lambda: server)
+
+    result = provider.send(
+        to="patient@example.com",
+        subject="Claim",
+        text="Plain",
+        html="<p>Html</p>",
+        reference="em:1",
+    )
+
+    assert result.status == NotificationStatus.SENT
+    assert server.logins == [("claims.desk@gmail.example", "app-password")]
+    [message] = server.sent
+    assert message["To"] == "patient@example.com"
+    assert message["From"] == "Claims <claims@clinic.example>"
+    assert message.get_body(("plain",)).get_content().strip() == "Plain"
+    assert "<p>Html</p>" in message.get_body(("html",)).get_content()
+    assert result.provider_message_id in message["Message-ID"]
+
+
+@pytest.mark.parametrize(
+    ("failure", "error"),
+    [
+        (smtplib.SMTPAuthenticationError(535, b"bad"), ProviderPermanentError),
+        (smtplib.SMTPRecipientsRefused({"x": (550, b"no")}), ProviderPermanentError),
+        (smtplib.SMTPDataError(554, b"rejected"), ProviderPermanentError),
+        (smtplib.SMTPDataError(451, b"try later"), ProviderTemporaryError),
+        (smtplib.SMTPServerDisconnected("gone"), ProviderTemporaryError),
+        (TimeoutError(), ProviderTemporaryError),
+    ],
+)
+def test_smtp_error_classes(email_configured, failure, error):
+    provider = SmtpEmail(connect=lambda: FakeSmtp(fail_with=failure))
+
+    with pytest.raises(error):
+        provider.send(to="p@example.com", subject="s", text="t", html="h", reference="r")
+
+
+def test_smtp_connection_failure_is_temporary(email_configured):
+    def refuse():
+        raise ConnectionRefusedError()
+
+    with pytest.raises(ProviderTemporaryError):
+        SmtpEmail(connect=refuse).send(
+            to="p@example.com", subject="s", text="t", html="h", reference="r"
+        )
+
+
+def test_brevo_request_and_answer(email_configured):
+    seen = []
+    provider = BrevoEmail(client_answering(201, {"messageId": "<abc@smtp-relay>"}, seen))
+
+    result = provider.send(
+        to="patient@example.com",
+        subject="Claim",
+        text="Plain",
+        html="<p>Html</p>",
+        reference="em:1",
+    )
+
+    assert result.provider_message_id == "<abc@smtp-relay>"
+    assert result.status == NotificationStatus.SENT
+    [request] = seen
+    assert str(request.url) == "https://api.brevo.com/v3/smtp/email"
+    assert request.headers["api-key"] == "xkeysib-test"
+    body = json.loads(request.content)
+    assert body["sender"] == {"email": "claims@clinic.example", "name": "Claims"}
+    assert body["to"] == [{"email": "patient@example.com"}]
+    assert body["textContent"] == "Plain" and body["htmlContent"] == "<p>Html</p>"
+
+
+def test_brevo_refusal_is_permanent(email_configured):
+    provider = BrevoEmail(
+        client_answering(400, {"code": "invalid_parameter", "message": "bad sender"})
+    )
+
+    with pytest.raises(ProviderPermanentError, match="bad sender"):
+        provider.send(to="p@example.com", subject="s", text="t", html="h", reference="r")
+
+
+def test_unconfigured_email_never_pretends_to_send():
+    with pytest.raises(ProviderPermanentError):
+        SmtpEmail(connect=lambda: FakeSmtp()).send(
+            to="p@example.com", subject="s", text="t", html="h", reference="r"
+        )
+    with pytest.raises(ProviderPermanentError):
+        BrevoEmail(failing_client()).send(
+            to="p@example.com", subject="s", text="t", html="h", reference="r"
+        )

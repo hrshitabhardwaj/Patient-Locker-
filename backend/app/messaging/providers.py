@@ -2,17 +2,22 @@
 
 - test outbox ("fake"): records the message and reports it delivered; nothing leaves the
   machine.
-- Twilio WhatsApp, Meta WhatsApp Cloud API, Resend email: real adapters. They are tested
-  against recorded provider responses only; live delivery is confirmed in Phase 12 with the
-  company's accounts. Missing credentials fail loudly rather than pretending to send.
+- Twilio WhatsApp, Meta WhatsApp Cloud API, Resend, Brevo and SMTP email: real adapters.
+  They are tested against recorded provider responses only; live delivery is confirmed
+  once real accounts are configured. Missing credentials fail loudly rather than
+  pretending to send.
 
 Error handling: 429 and 5xx (and network failures) mean the provider did not accept the
 message, so it is safe to retry (ProviderTemporaryError). Other 4xx mean it was refused and
 retrying will not help (ProviderPermanentError).
 """
 
+import smtplib
+import ssl
 import uuid
 from dataclasses import dataclass
+from email.message import EmailMessage
+from email.utils import make_msgid, parseaddr
 from typing import Protocol
 
 import httpx2
@@ -214,6 +219,110 @@ class ResendEmail:
         return SendResult(body["id"], NotificationStatus.SENT, "Accepted by Resend.")
 
 
+class SmtpEmail:
+    """Plain SMTP, e.g. Gmail with an app password (smtp.gmail.com, port 587 or 465).
+
+    Sends from the account itself, so no domain needs verifying. Render's free plan blocks
+    outgoing SMTP ports; use BrevoEmail there.
+    """
+
+    name = "smtp"
+
+    def __init__(self, connect=None):
+        settings = get_settings()
+        self.host = settings.smtp_host
+        self.port = settings.smtp_port
+        self.username = settings.smtp_username
+        self.password = settings.smtp_password.get_secret_value()
+        self.sender = settings.email_from or settings.smtp_username
+        self.timeout = settings.provider_timeout_seconds
+        self._connect = connect or self._open
+
+    def _open(self) -> smtplib.SMTP:
+        context = ssl.create_default_context()
+        if self.port == 465:
+            return smtplib.SMTP_SSL(self.host, self.port, timeout=self.timeout, context=context)
+        server = smtplib.SMTP(self.host, self.port, timeout=self.timeout)
+        server.starttls(context=context)
+        return server
+
+    def send(self, *, to: str, subject: str, text: str, html: str, reference: str) -> SendResult:
+        if not (self.host and self.username and self.password and self.sender):
+            raise ProviderPermanentError("SMTP is not configured (host, username, password)")
+        message = EmailMessage()
+        message["From"] = self.sender
+        message["To"] = to
+        message["Subject"] = subject
+        domain = parseaddr(self.sender)[1].rpartition("@")[2] or None
+        message_id = make_msgid(idstring=reference[:40].replace(":", "-"), domain=domain)
+        message["Message-ID"] = message_id
+        message.set_content(text)
+        message.add_alternative(html, subtype="html")
+        try:
+            with self._connect() as server:
+                server.login(self.username, self.password)
+                refused = server.send_message(message)
+        except smtplib.SMTPAuthenticationError:
+            raise ProviderPermanentError(
+                "SMTP sign-in was refused (check the app password)"
+            ) from None
+        except smtplib.SMTPRecipientsRefused:
+            raise ProviderPermanentError(
+                "The email address was refused by the mail server"
+            ) from None
+        except smtplib.SMTPResponseException as exc:
+            if exc.smtp_code >= 500:
+                raise ProviderPermanentError(
+                    f"Mail server refused the message ({exc.smtp_code})"
+                ) from None
+            raise ProviderTemporaryError(f"Mail server answered {exc.smtp_code}") from None
+        except (smtplib.SMTPException, OSError) as exc:
+            raise ProviderTemporaryError(
+                f"Mail server not reachable: {type(exc).__name__}"
+            ) from None
+        if refused:
+            raise ProviderPermanentError("The email address was refused by the mail server")
+        return SendResult(
+            message_id.strip("<>"), NotificationStatus.SENT, "Accepted by the mail server."
+        )
+
+
+class BrevoEmail:
+    """Brevo transactional email over HTTPS (works where SMTP ports are blocked)."""
+
+    name = "brevo"
+
+    def __init__(self, client: httpx2.Client | None = None):
+        settings = get_settings()
+        self.api_key = settings.brevo_api_key.get_secret_value()
+        self.sender_name, self.sender_email = parseaddr(settings.email_from)
+        self.client = client or _client()
+
+    def send(self, *, to: str, subject: str, text: str, html: str, reference: str) -> SendResult:
+        if not (self.api_key and self.sender_email):
+            raise ProviderPermanentError("Brevo is not configured (API key, sender address)")
+        sender = {"email": self.sender_email}
+        if self.sender_name:
+            sender["name"] = self.sender_name
+        body = _post(
+            self.client,
+            "Brevo",
+            "https://api.brevo.com/v3/smtp/email",
+            headers={"api-key": self.api_key, "accept": "application/json"},
+            json={
+                "sender": sender,
+                "to": [{"email": to}],
+                "subject": subject,
+                "textContent": text,
+                "htmlContent": html,
+                "headers": {"X-Reference": reference[:100]},
+            },
+        )
+        if not body.get("messageId"):
+            raise ProviderTemporaryError("Brevo did not return a message id")
+        return SendResult(body["messageId"], NotificationStatus.SENT, "Accepted by Brevo.")
+
+
 def whatsapp_provider() -> WhatsAppProvider:
     choice = get_settings().whatsapp_provider
     if choice == "twilio":
@@ -224,4 +333,11 @@ def whatsapp_provider() -> WhatsAppProvider:
 
 
 def email_provider() -> EmailProvider:
-    return ResendEmail() if get_settings().email_provider == "resend" else TestOutboxEmail()
+    choice = get_settings().email_provider
+    if choice == "resend":
+        return ResendEmail()
+    if choice == "smtp":
+        return SmtpEmail()
+    if choice == "brevo":
+        return BrevoEmail()
+    return TestOutboxEmail()

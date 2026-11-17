@@ -23,9 +23,9 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design and the decision
 | 9 | WhatsApp and email | **Built** — automatic, once per channel, retries, delivery webhooks; Twilio, Meta and Resend adapters tested against simulated responses. **Live delivery untested until Phase 12** |
 | 10 | Dashboard and frontend | **Done** — dashboard, patients, locker, query details, review, messages and delivery, staff accounts, audit log |
 | 11 | Security, testing and errors | **Done** — access sweep over every route, log-leak test, per-address sign-in limit, browser walkthrough, dependency audit clean |
-| 12 | Deployment, live credentials, evaluation prep | Not started |
+| 12 | Deployment, live credentials, evaluation prep | **In progress** — files in PostgreSQL, Docker image with OCR, SMTP and Brevo email, bulk patient import, keep-awake ping. Live Twilio/email credentials still to be added |
 
-Live WhatsApp and email delivery is **untested** until company accounts are added in Phase 12.
+Live WhatsApp and email delivery is **untested** until real Twilio and email credentials are added.
 
 ## Stack
 
@@ -129,7 +129,9 @@ patient exists. Every refused attempt is recorded in the audit log.
 - Accepted files: **PDF, JPEG and PNG**, up to 20 MB and 100 pages (configurable). The type
   is read from the file's content, never its name. Empty, damaged, password-protected,
   oversized or disguised files are refused with a clear reason.
-- Files are encrypted (AES-256-GCM) before they reach disk and stored under random IDs.
+- Files are encrypted (AES-256-GCM) before they are stored, under random IDs: on disk
+  (`FILE_STORE=disk`, local default) or in PostgreSQL (`FILE_STORE=database`, used on Render
+  because its free plan wipes the disk on every restart).
 - The same file cannot be uploaded twice for one patient.
 - Replacing a document keeps the old version; deleting is a soft delete. Both appear in the
   document's history together with every view and download.
@@ -251,6 +253,8 @@ Real providers are built but **not yet tested live** (Phase 12, with the company
 |---|---|---|---|
 | `WHATSAPP_PROVIDER=twilio` | Twilio WhatsApp | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_FROM` | `{PUBLIC_BASE_URL}/api/v1/webhooks/twilio/status` (set automatically per message) |
 | `WHATSAPP_PROVIDER=meta` | Meta WhatsApp Cloud API | `META_WA_TOKEN`, `META_WA_PHONE_NUMBER_ID`, `META_APP_SECRET`, `META_VERIFY_TOKEN` | `{PUBLIC_BASE_URL}/api/v1/webhooks/meta/whatsapp` |
+| `EMAIL_PROVIDER=smtp` | Any SMTP server, e.g. Gmail with an app password. **Blocked on Render's free plan** (outgoing SMTP ports are closed) | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `EMAIL_FROM` | none (status stays *sent*) |
+| `EMAIL_PROVIDER=brevo` | Brevo over HTTPS; works on Render's free plan | `BREVO_API_KEY`, `EMAIL_FROM` (a sender address verified in Brevo, no domain needed) | none (status stays *sent*) |
 | `EMAIL_PROVIDER=resend` | Resend | `RESEND_API_KEY`, `EMAIL_FROM` (verified domain), `RESEND_WEBHOOK_SECRET` | `{PUBLIC_BASE_URL}/api/v1/webhooks/resend` |
 
 Every webhook request must carry the provider's valid signature (Resend's also must be under five
@@ -296,6 +300,20 @@ Screens refresh themselves while documents or letters are being processed.
 - Audit log: append-only (enforced by a database trigger), personal data refused in its details.
 - Dependencies: `pip-audit` and `npm audit` report no known vulnerabilities (2 Nov 2026).
 
+## Loading patients in bulk
+
+```bash
+make import-patients FOLDER=~/patients API=https://patient-locker.vercel.app USER_EMAIL=you@clinic.com
+```
+
+One sub-folder per patient: `patient.txt` (`Full name:`, `Phone:`, `Email:`, optional
+`Date of birth:`, `Policy number:`, `Claim number:`), a `locker/` folder of PDFs or images
+(`discharge_summary__file.pdf` sets the category), and optional `QUERY_LETTER*.pdf` files that
+are uploaded only with `LETTERS=1` (uploading a letter sends the patient message).
+`PHONE=` and `EMAIL_TO=` send every patient's messages to one test contact. The import signs in
+through the API (password prompted), reuses existing patients and skips files already there,
+so it can be run again. `make demo-files` writes the three demo patients in this format.
+
 ## Measuring accuracy on new letters
 
 ```bash
@@ -333,9 +351,9 @@ are git-ignored and must never be committed.
 
 | Setting | Value |
 |---|---|
+| Runtime | **Docker** (`backend/Dockerfile`, which includes Tesseract for OCR) |
 | Root directory | `backend` |
-| Build command | `pip install -r requirements.txt` |
-| Start command | `sh scripts/render_start.sh` (migrates, starts the worker, then the API) |
+| Start command | none: the image runs `scripts/render_start.sh` (migrates, starts the worker, then the API) |
 | Health check path | `/api/v1/health` |
 | Python | 3.12 (from `backend/.python-version`) |
 
@@ -349,10 +367,15 @@ reachable *and* at the latest migration; otherwise 503 with `unavailable` or
 `migrations_pending`.
 
 Limits of the hosted setup:
-- Uploaded files are kept on the service's disk. Attach a Render persistent disk (paid plan)
-  and set `STORAGE_DIR` to it, or files are lost on each deploy or restart.
-- Tesseract is not installed in Render's Python runtime, so scanned pages cannot be OCR'd
-  there; PDFs with a text layer are unaffected.
+- Files are kept in PostgreSQL (`FILE_STORE=database`), so restarts and deploys keep them.
+- No AI model runs on Render (`LLM_PROVIDER=none`). Signature and stamp checks need it, so a
+  letter asking for a signed or stamped document is held for staff review there.
+- The free plan sleeps after 15 idle minutes; `.github/workflows/keep-awake.yml` pings the
+  health check every 10 minutes.
+- Outgoing SMTP is blocked on the free plan: use `EMAIL_PROVIDER=brevo`.
+- WhatsApp through the Twilio sandbox only reaches phones that have sent the sandbox's
+  `join <code>` message, and free-form messages need the recipient to have written in the
+  last 24 hours.
 
 First admin: see [First admin account](#first-admin-account). The command runs on your
 machine against the database's External Database URL; it is never run during deployment.

@@ -38,8 +38,22 @@ def test_pdf_upload_is_stored_encrypted_and_audited(client, db, staff_with_patie
     assert body["processing_status"] == "uploaded"
     assert body["uploaded_by_name"] == staff.full_name
 
-    [stored] = list(Path(get_settings().storage_dir).rglob(body["id"].replace("-", "")))
-    on_disk = stored.read_bytes()
+    storage_key = body["id"].replace("-", "")
+    if get_settings().file_store == "database":
+        from sqlalchemy import select
+
+        from app.db.session import get_engine
+        from app.models.storage import StoredFile
+
+        with get_engine().connect() as connection:
+            on_disk = bytes(
+                connection.scalar(
+                    select(StoredFile.blob).where(StoredFile.storage_key == storage_key)
+                )
+            )
+    else:
+        [stored] = list(Path(get_settings().storage_dir).rglob(storage_key))
+        on_disk = stored.read_bytes()
     assert b"%PDF" not in on_disk and data not in on_disk
 
     [entry] = audit_entries(db, "document.uploaded")
@@ -136,9 +150,9 @@ def test_view_and_download_return_the_original_bytes(client, db, staff_with_pati
     assert viewed.headers["content-type"] == "application/pdf"
     assert viewed.headers["content-disposition"].startswith("inline;")
     assert downloaded.headers["content-disposition"].startswith("attachment;")
-    assert "UTF-8''Bill%20r%C3%A4ksm%C3%B6rg%C3%A5s.pdf" in downloaded.headers[
-        "content-disposition"
-    ]
+    assert (
+        "UTF-8''Bill%20r%C3%A4ksm%C3%B6rg%C3%A5s.pdf" in downloaded.headers["content-disposition"]
+    )
     assert viewed.headers["cache-control"] == "no-store"
     assert len(audit_entries(db, "document.viewed")) == 1
     assert len(audit_entries(db, "document.downloaded")) == 1
@@ -189,9 +203,7 @@ def test_replacing_a_document_keeps_history(client, db, staff_with_patient):
     assert [v["id"] for v in history["versions"]] == [first["id"], second["id"]]
     assert [e["action"] for e in history["events"]] == ["document.uploaded"] * 2
 
-    again = upload(
-        client, patient, make_pdf(marker="v3"), replaces_document_id=first["id"]
-    )
+    again = upload(client, patient, make_pdf(marker="v3"), replaces_document_id=first["id"])
     assert again.status_code == 400
 
 

@@ -6,7 +6,7 @@ OLLAMA_MODEL ?= qwen3-vl:2b-instruct
 
 .PHONY: setup env backend-install frontend-install db-start db-create migrate \
         dev-api dev-web worker test test-llm test-e2e lint build-web create-admin llm-setup \
-        eval-letters demo-files
+        eval-letters demo-files import-patients
 
 ## First-time setup on a clean machine (after `brew install postgresql@16 tesseract ollama`)
 setup: env backend-install frontend-install db-start db-create migrate llm-setup
@@ -66,6 +66,12 @@ test-e2e: demo-files
 eval-letters:
 	@test -n "$(LETTERS)" || (echo 'usage: make eval-letters LETTERS=folder [KEY=answer_key.json]'; exit 1)
 	PYTHONPATH=backend $(BIN)/python -m scripts.evaluate_letters --letters "$(LETTERS)" $(if $(KEY),--key "$(KEY)",)
+
+## Load patient folders into a running portal: make import-patients FOLDER=~/dir API=https://... USER_EMAIL=you@x
+##   optional: LETTERS=1 (also upload query letters; sends messages), PHONE=+91..., EMAIL_TO=a@b (one test contact for all)
+import-patients:
+	@test -n "$(FOLDER)" || (echo 'usage: make import-patients FOLDER=dir [API=url] [USER_EMAIL=you@x] [LETTERS=1] [PHONE=+91..] [EMAIL_TO=a@b]'; exit 1)
+	cd backend && .venv/bin/python -m scripts.import_patients "$(abspath $(FOLDER))" $(if $(API),--api "$(API)",) $(if $(USER_EMAIL),--user "$(USER_EMAIL)",) $(if $(LETTERS),--letters,) $(if $(PHONE),--contact-phone "$(PHONE)",) $(if $(EMAIL_TO),--contact-email "$(EMAIL_TO)",)
 
 lint:
 	cd backend && .venv/bin/ruff check app tests scripts e2e alembic/env.py

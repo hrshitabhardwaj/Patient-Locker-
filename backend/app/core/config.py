@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     file_encryption_key: SecretStr
 
     storage_dir: Path = Path("storage")
+    # disk (STORAGE_DIR) | database (PostgreSQL; for hosts that wipe the disk on restart)
+    file_store: Literal["disk", "database"] = "disk"
 
     # Sessions end after this much inactivity, and in any case after the absolute limit.
     session_idle_minutes: int = 30
@@ -89,7 +91,7 @@ class Settings(BaseSettings):
 
     # Delivery. "fake" is the local test outbox: nothing leaves this machine.
     whatsapp_provider: Literal["fake", "twilio", "meta"] = "fake"
-    email_provider: Literal["fake", "resend"] = "fake"
+    email_provider: Literal["fake", "resend", "smtp", "brevo"] = "fake"
     provider_timeout_seconds: int = 20
 
     # Twilio WhatsApp (sandbox or approved sender)
@@ -110,6 +112,18 @@ class Settings(BaseSettings):
     # Sender, e.g. "Claims Desk <claims@your-verified-domain.com>"
     email_from: str = ""
     resend_webhook_secret: SecretStr = SecretStr("")
+
+    # SMTP email (e.g. Gmail with an app password). Sender comes from EMAIL_FROM.
+    # Render's free plan blocks outgoing SMTP; use brevo there.
+    smtp_host: str = "smtp.gmail.com"
+    # 587 = STARTTLS, 465 = TLS from the start
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: SecretStr = SecretStr("")
+
+    # Brevo email over HTTPS (works where SMTP is blocked). Sender comes from EMAIL_FROM and
+    # must be a sender address verified in Brevo.
+    brevo_api_key: SecretStr = SecretStr("")
 
     # Background worker
     worker_poll_seconds: float = 1.0

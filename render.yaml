@@ -3,20 +3,15 @@
 services:
   - type: web
     name: patient-locker-backend
-    runtime: python
+    # Docker (backend/Dockerfile) so Tesseract OCR is available for scanned letters.
+    runtime: docker
     rootDir: backend
-    # Python version comes from backend/.python-version.
-    buildCommand: pip install -r requirements.txt
-    # Applies migrations, starts the job worker, then the API.
-    startCommand: sh scripts/render_start.sh
+    dockerfilePath: ./Dockerfile
+    # The image runs scripts/render_start.sh: migrations, the job worker, then the API.
     healthCheckPath: /api/v1/health
     plan: free
-    # Uploaded documents are stored (encrypted) on local disk. Without a persistent disk
-    # they are lost on every deploy and restart. A disk needs a paid plan:
-    # disk:
-    #   name: patient-files
-    #   mountPath: /var/data
-    #   sizeGB: 1
+    # The free plan's disk is wiped on every restart, so documents are stored (encrypted)
+    # in PostgreSQL instead: FILE_STORE=database below.
     envVars:
       - key: APP_ENV
         value: production
@@ -31,12 +26,30 @@ services:
       # Never change it afterwards: stored files can only be read with the same key.
       - key: FILE_ENCRYPTION_KEY
         sync: false
-      # Set to /var/data/storage once the disk above is attached.
-      - key: STORAGE_DIR
-        value: storage
-      # Ollama only runs locally; documents are still extracted and classified by rules.
+      - key: FILE_STORE
+        value: database
+      # Ollama only runs locally; documents are still extracted (with OCR) and classified by rules.
       - key: LLM_PROVIDER
         value: none
+      # WhatsApp through the Twilio sandbox. Recipients must first send the sandbox's
+      # "join <code>" message to the sandbox number.
+      - key: WHATSAPP_PROVIDER
+        value: twilio
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      # The sandbox number, e.g. +14155238886 (no "whatsapp:" prefix)
+      - key: TWILIO_WHATSAPP_FROM
+        sync: false
+      # Email through Brevo's HTTPS API: Render's free plan blocks outgoing SMTP ports.
+      - key: EMAIL_PROVIDER
+        value: brevo
+      - key: BREVO_API_KEY
+        sync: false
+      # A sender address verified in Brevo, e.g. "Claims Desk <you@gmail.com>"
+      - key: EMAIL_FROM
+        sync: false
       - key: COMPANY_NAME
         sync: false
       - key: SUPPORT_EMAIL

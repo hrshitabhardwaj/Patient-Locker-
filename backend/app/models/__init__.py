@@ -27,10 +27,12 @@ from app.models.query import (
     QueryPoint,
     RequirementType,
 )
+from app.models.storage import StoredFile
 from app.models.user import User, UserSession
 
 __all__ = [
     "AuditLog",
+    "StoredFile",
     "Channel",
     "Notification",
     "NotificationEvent",
