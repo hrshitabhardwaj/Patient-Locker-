@@ -14,7 +14,17 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import NotFoundError, ServiceError
 from app.core.permissions import Permission, has_permission
-from app.models import Document, DocumentKind, Patient, PatientAssignment, QueryLetter, User
+from app.models import (
+    Document,
+    DocumentKind,
+    MatchResult,
+    MatchStatus,
+    Patient,
+    PatientAssignment,
+    QueryLetter,
+    QueryPoint,
+    User,
+)
 from app.models.patient import PATIENT_CODE_SEQUENCE
 from app.services.audit import AuditAction, AuditOutcome, record_audit
 
@@ -71,8 +81,9 @@ def _accessible_patients(user: User) -> Select:
 
 def list_patients(
     db: Session, user: User, *, q: str | None, limit: int, offset: int
-) -> tuple[list[tuple[Patient, int, str | None]], int]:
-    """Accessible patients with their document count and latest query letter status."""
+) -> tuple[list[tuple[Patient, int, str | None, str | None, int]], int]:
+    """Accessible patients with their document count and latest query letter status,
+    outcome and number of items needed from the patient."""
     statement = _accessible_patients(user)
     if q and q.strip():
         term = q.strip()
@@ -116,7 +127,48 @@ def list_patients(
         .limit(limit)
         .offset(offset)
     ).all()
-    return [(patient, count, status) for patient, count, status in rows], total
+    latest = _latest_letter_summaries(db, [patient.id for patient, _, _ in rows])
+    return [
+        (patient, count, status, *latest.get(patient.id, (None, 0)))
+        for patient, count, status in rows
+    ], total
+
+
+def _latest_letter_summaries(
+    db: Session, patient_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, tuple[str | None, int]]:
+    """For each patient: the latest letter's outcome and how many of its points are needed
+    from the patient (current decisions only)."""
+    if not patient_ids:
+        return {}
+    letters = db.execute(
+        select(QueryLetter.patient_id, QueryLetter.id, QueryLetter.outcome)
+        .where(QueryLetter.patient_id.in_(patient_ids))
+        .distinct(QueryLetter.patient_id)
+        .order_by(QueryLetter.patient_id, QueryLetter.created_at.desc())
+    ).all()
+    letter_ids = [letter_id for _, letter_id, _ in letters]
+    pending = (
+        dict(
+            db.execute(
+                select(QueryPoint.query_letter_id, func.count(MatchResult.id))
+                .join(MatchResult, MatchResult.query_point_id == QueryPoint.id)
+                .where(
+                    QueryPoint.query_letter_id.in_(letter_ids),
+                    QueryPoint.dismissed_at.is_(None),
+                    MatchResult.superseded_at.is_(None),
+                    MatchResult.status == MatchStatus.NEEDS_FROM_PATIENT,
+                )
+                .group_by(QueryPoint.query_letter_id)
+            ).all()
+        )
+        if letter_ids
+        else {}
+    )
+    return {
+        patient_id: (outcome.value if outcome else None, pending.get(letter_id, 0))
+        for patient_id, letter_id, outcome in letters
+    }
 
 
 def create_patient(
@@ -227,9 +279,7 @@ def set_assignments(
     for user_id in removed:
         db.delete(db.get(PatientAssignment, (patient_id, user_id)))
     for user_id in added:
-        db.add(
-            PatientAssignment(patient_id=patient_id, user_id=user_id, assigned_by_id=actor.id)
-        )
+        db.add(PatientAssignment(patient_id=patient_id, user_id=user_id, assigned_by_id=actor.id))
     record_audit(
         db,
         action=AuditAction.PATIENT_ASSIGNMENTS_CHANGED,

@@ -13,7 +13,7 @@ import {
   StatusBadge,
 } from "../components/ui";
 import { api } from "../lib/api";
-import { LETTER_STATUS } from "../lib/labels";
+import { LETTER_IN_PROGRESS, LETTER_STATUS, maskPhone, OUTCOME } from "../lib/labels";
 import type { Page, Patient, PatientListItem } from "../lib/types";
 
 const EMPTY_FORM = {
@@ -117,7 +117,7 @@ export default function PatientsPage() {
       <Card>
         <input
           type="search"
-          placeholder="Search by name, Patient ID, phone, email, policy or claim number"
+          placeholder="Search by name, Patient ID, mobile, email, policy or claim number"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className={`${inputClass} mb-4`}
@@ -134,10 +134,10 @@ export default function PatientsPage() {
                 <tr>
                   <th className="py-2 pr-4">Patient ID</th>
                   <th className="py-2 pr-4">Name</th>
-                  <th className="py-2 pr-4">Phone</th>
-                  <th className="py-2 pr-4">Email</th>
+                  <th className="py-2 pr-4">Mobile</th>
                   <th className="py-2 pr-4 text-right">Documents</th>
-                  <th className="py-2">Query status</th>
+                  <th className="py-2 pr-4">Latest query</th>
+                  <th className="py-2">Items needed</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -149,15 +149,23 @@ export default function PatientsPage() {
                         {patient.full_name}
                       </Link>
                     </td>
-                    <td className="py-2 pr-4">{patient.phone}</td>
-                    <td className="py-2 pr-4">{patient.email}</td>
+                    <td className="py-2 pr-4 font-mono text-xs text-slate-600">{maskPhone(patient.phone)}</td>
                     <td className="py-2 pr-4 text-right">{patient.document_count}</td>
-                    <td className="py-2">
-                      {patient.latest_letter_status ? (
-                        <StatusBadge map={LETTER_STATUS} code={patient.latest_letter_status} />
-                      ) : (
+                    <td className="py-2 pr-4">
+                      {!patient.latest_letter_status ? (
                         <span className="text-slate-400">No query yet</span>
+                      ) : patient.latest_letter_outcome && !LETTER_IN_PROGRESS.has(patient.latest_letter_status) ? (
+                        <StatusBadge map={OUTCOME} code={patient.latest_letter_outcome} />
+                      ) : (
+                        <StatusBadge map={LETTER_STATUS} code={patient.latest_letter_status} />
                       )}
+                    </td>
+                    <td className="py-2">
+                      {patient.pending_items > 0 ? (
+                        <span className="font-medium text-violet-800">{patient.pending_items} item(s)</span>
+                      ) : patient.latest_letter_status ? (
+                        <span className="text-slate-400">—</span>
+                      ) : null}
                     </td>
                   </tr>
                 ))}

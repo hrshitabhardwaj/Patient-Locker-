@@ -13,6 +13,7 @@ import {
   ErrorBox,
   inputClass,
   Labelled,
+  LetterBadges,
   Notice,
   Spinner,
   StatusBadge,
@@ -21,14 +22,15 @@ import { api, upload } from "../lib/api";
 import {
   CATEGORY_LABEL,
   categoryLabel,
+  displayName,
   DOCUMENT_STATUS,
   formatDateTime,
   formatSize,
   LETTER_IN_PROGRESS,
-  LETTER_STATUS,
-  OUTCOME,
+  LOCKER_CHECKLIST,
+  NOTIFICATION_STATUS,
 } from "../lib/labels";
-import type { LockerDocument, Patient, PatientMessageRow, QueryLetter } from "../lib/types";
+import type { LockerDocument, Patient, PatientMessageRow, QueryLetter, QueryLetterDetail } from "../lib/types";
 
 const DOCUMENT_CATEGORIES = Object.entries(CATEGORY_LABEL).filter(([code]) => code !== "clarification");
 
@@ -141,7 +143,7 @@ function DocumentActions({ doc, patientId }: { doc: LockerDocument; patientId: s
           variant="ghost"
           className="text-xs text-red-700 hover:bg-red-50"
           onClick={() => {
-            if (window.confirm(`Remove "${doc.original_filename}" from the locker? It is kept in the history.`)) {
+            if (window.confirm(`Remove "${displayName(doc.original_filename)}" from the locker? It is kept in the history.`)) {
               remove.mutate();
             }
           }}
@@ -165,18 +167,34 @@ function Locker({ patientId }: { patientId: string }) {
         : 15000,
   });
   const supporting = documents.data?.filter((d) => d.kind === "supporting") ?? [];
+  const [uploading, setUploading] = useState(false);
+  const showUpload = uploading || (documents.isSuccess && supporting.length === 0);
 
   return (
-    <Card title={`Document locker (${supporting.length})`}>
-      <UploadBox
-        label="Upload a document"
-        hint="PDF, JPEG or PNG, up to 20 MB. Text is extracted (OCR for scans) and the document is classified automatically."
-        withCategory
-        onUpload={async (file, category) => {
-          await upload(`/patients/${patientId}/documents`, file, { category });
-          queryClient.invalidateQueries({ queryKey: ["documents", patientId] });
-        }}
-      />
+    <Card
+      title={`Document locker (${supporting.length})`}
+      actions={
+        !showUpload && (
+          <Button variant="secondary" onClick={() => setUploading(true)}>
+            + Upload document
+          </Button>
+        )
+      }
+    >
+      {showUpload && (
+        <div className="mb-4">
+          <UploadBox
+            label="Upload a document"
+            hint="PDF, JPEG or PNG, up to 20 MB. Text is extracted (OCR for scans) and the document is classified automatically."
+            withCategory
+            onUpload={async (file, category) => {
+              await upload(`/patients/${patientId}/documents`, file, { category });
+              queryClient.invalidateQueries({ queryKey: ["documents", patientId] });
+            }}
+          />
+        </div>
+      )}
+      {supporting.length > 0 && <LockerChecklist documents={supporting} />}
       <div className="mt-4">
         {documents.isLoading ? (
           <Spinner label="Loading…" />
@@ -207,7 +225,7 @@ function Locker({ patientId }: { patientId: string }) {
                           rel="noreferrer"
                           className="font-medium text-sky-800 hover:underline"
                         >
-                          {doc.original_filename}
+                          {displayName(doc.original_filename)}
                         </a>
                         <span className="block text-xs text-slate-500">
                           {doc.page_count} page(s) · {formatSize(doc.size_bytes)} ·{" "}
@@ -265,17 +283,33 @@ function QueryLetters({ patientId }: { patientId: string }) {
       query.state.data?.some((l) => LETTER_IN_PROGRESS.has(l.status)) ? 2000 : 15000,
   });
 
+  const [uploading, setUploading] = useState(false);
+  const showUpload = uploading || (letters.isSuccess && letters.data.length === 0);
+
   return (
-    <Card title="Insurer query letters">
-      <UploadBox
-        label="Upload the insurer's query letter"
-        hint="Processing starts automatically: the letter is read, each requirement is checked against the locker, and the patient is messaged when nothing needs review."
-        onUpload={async (file) => {
-          await upload(`/patients/${patientId}/query-letters`, file);
-          queryClient.invalidateQueries({ queryKey: ["letters", patientId] });
-        }}
-      />
-      <div className="mt-4">
+    <Card
+      title="Insurer query letters"
+      actions={
+        !showUpload && (
+          <Button onClick={() => setUploading(true)}>+ Upload query letter</Button>
+        )
+      }
+    >
+      {showUpload && (
+        <div className="mb-4">
+          <UploadBox
+            label="Upload the insurer's query letter"
+            hint="Everything after this is automatic: the letter is read, each request is checked against the locker, and the patient is messaged on WhatsApp and email. Only uncertain points wait for staff."
+            onUpload={async (file) => {
+              await upload(`/patients/${patientId}/query-letters`, file);
+              queryClient.invalidateQueries({ queryKey: ["letters", patientId] });
+              queryClient.invalidateQueries({ queryKey: ["patient-messages", patientId] });
+              setUploading(false);
+            }}
+          />
+        </div>
+      )}
+      <div>
         {letters.isLoading ? (
           <Spinner label="Loading…" />
         ) : !letters.data?.length ? (
@@ -296,8 +330,7 @@ function QueryLetters({ patientId }: { patientId: string }) {
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   {LETTER_IN_PROGRESS.has(letter.status) && <Spinner />}
-                  <StatusBadge map={LETTER_STATUS} code={letter.status} />
-                  <StatusBadge map={OUTCOME} code={letter.outcome} />
+                  <LetterBadges status={letter.status} outcome={letter.outcome} />
                   <Link to={`/letters/${letter.id}`}>
                     <Button variant="secondary">Open</Button>
                   </Link>
@@ -308,6 +341,121 @@ function QueryLetters({ patientId }: { patientId: string }) {
         )}
       </div>
     </Card>
+  );
+}
+
+function LockerChecklist({ documents }: { documents: LockerDocument[] }) {
+  const usable = documents.filter((d) => d.processing_status !== "failed");
+  const countFor = (codes: string[]) =>
+    usable.filter((d) => codes.includes(d.declared_category ?? d.detected_category ?? "")).length;
+  const known = new Set(LOCKER_CHECKLIST.flatMap((item) => item.codes));
+  const others = usable.filter((d) => !known.has(d.declared_category ?? d.detected_category ?? "")).length;
+  return (
+    <div className="flex flex-wrap gap-2" aria-label="What the locker holds">
+      {LOCKER_CHECKLIST.map((item) => {
+        const n = countFor(item.codes);
+        return (
+          <span
+            key={item.label}
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${
+              n ? "bg-emerald-50 text-emerald-800 ring-emerald-200" : "bg-slate-50 text-slate-400 ring-slate-200"
+            }`}
+          >
+            <span aria-hidden>{n ? "✓" : "–"}</span>
+            {item.label}
+            {n > 1 && <span className="text-emerald-600">×{n}</span>}
+            <span className="sr-only">{n ? `${n} in locker` : "not in locker"}</span>
+          </span>
+        );
+      })}
+      {others > 0 && (
+        <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+          Other ×{others}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function CaseSummary({ patientId }: { patientId: string }) {
+  const letters = useQuery({
+    queryKey: ["letters", patientId],
+    queryFn: () => api<QueryLetter[]>(`/patients/${patientId}/query-letters`),
+    refetchInterval: (query) =>
+      query.state.data?.some((l) => LETTER_IN_PROGRESS.has(l.status)) ? 2000 : 15000,
+  });
+  const latest = [...(letters.data ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+  const detail = useQuery({
+    queryKey: ["letter", latest?.id],
+    queryFn: () => api<QueryLetterDetail>(`/query-letters/${latest!.id}`),
+    enabled: Boolean(latest),
+    refetchInterval: (query) =>
+      query.state.data && LETTER_IN_PROGRESS.has(query.state.data.status) ? 2000 : 10000,
+  });
+
+  if (letters.isLoading) return null;
+  if (!latest) {
+    return (
+      <Notice tone="grey">
+        No query letter yet. When the insurer's letter arrives, upload it below: checking and messaging the
+        patient happen automatically.
+      </Notice>
+    );
+  }
+  const d = detail.data;
+  const live = d?.points.filter((p) => !p.dismissed_at) ?? [];
+  const toAsk = live.filter((p) => p.current_match?.status === "needs_from_patient").length;
+  const toCheck = live.filter((p) => p.current_match?.status === "needs_review").length;
+  const inProgress = LETTER_IN_PROGRESS.has(latest.status);
+  const notifications = d?.current_message?.notifications ?? [];
+
+  let headline: string;
+  if (inProgress) headline = "Checking the latest letter…";
+  else if (latest.status === "awaiting_review")
+    headline = toCheck ? `Waiting for staff: ${toCheck} point(s) to check` : "Waiting for a staff check";
+  else if (latest.outcome === "no_additional_documents_required") headline = "Nothing needed from the patient";
+  else if (latest.outcome === "send_missing_items_message")
+    headline = `${toAsk} item(s) requested from the patient`;
+  else if (latest.status === "failed") headline = "Processing failed: open the letter";
+  else headline = "Latest letter";
+
+  const tone =
+    latest.status === "awaiting_review" || latest.status === "failed"
+      ? "border-amber-300 bg-amber-50"
+      : latest.outcome === "no_additional_documents_required"
+        ? "border-emerald-200 bg-emerald-50"
+        : "border-sky-200 bg-sky-50";
+
+  return (
+    <section className={`flex flex-wrap items-center justify-between gap-4 rounded-xl border p-4 ${tone}`}>
+      <div className="min-w-0">
+        <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">Case status</p>
+        <p className="mt-0.5 flex items-center gap-2 text-lg font-semibold text-slate-900">
+          {inProgress && <Spinner />}
+          {headline}
+        </p>
+        <p className="text-sm text-slate-600">
+          Query from {latest.insurer_name ?? "the insurer"}
+          {latest.letter_date ? ` dated ${latest.letter_date}` : ""} · received {formatDateTime(latest.created_at)}
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        {notifications.map((n) => (
+          <div key={n.id} className="rounded-lg bg-white px-3 py-2 text-xs shadow-sm ring-1 ring-slate-200">
+            <p className="font-semibold text-slate-800">{n.channel === "whatsapp" ? "WhatsApp" : "Email"}</p>
+            <div className="mt-1 flex items-center gap-2">
+              <StatusBadge map={NOTIFICATION_STATUS} code={n.status} />
+              <span className="text-slate-500">{formatDateTime(n.delivered_at ?? n.sent_at)}</span>
+            </div>
+          </div>
+        ))}
+        <Link to={`/letters/${latest.id}`}>
+          <Button variant={latest.status === "awaiting_review" ? "primary" : "secondary"}>
+            {latest.status === "awaiting_review" ? "Review now" : "Open letter"}
+          </Button>
+        </Link>
+      </div>
+    </section>
   );
 }
 
@@ -549,14 +697,20 @@ export default function PatientPage() {
         </Notice>
       )}
 
+      <CaseSummary patientId={patientId} />
+      <QueryLetters patientId={patientId} />
+      <Locker patientId={patientId} />
+      <Messages patientId={patientId} />
+
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <PatientDetails patient={p} />
         <Assignments patientId={patientId} />
       </div>
 
-      <Locker patientId={patientId} />
-      <QueryLetters patientId={patientId} />
-      <Messages patientId={patientId} />
+      <p className="text-center text-xs text-slate-500">
+        Files are encrypted when stored. Every view and download of this patient's documents is recorded in the
+        audit log. Patient messages never name a diagnosis or test, because phone previews can be seen by others.
+      </p>
     </div>
   );
 }

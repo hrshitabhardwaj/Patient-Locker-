@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
-import type { Tone } from "../lib/labels";
+import { LETTER_STATUS, OUTCOME, type Tone } from "../lib/labels";
 
 const TONES: Record<Tone, string> = {
   grey: "bg-slate-100 text-slate-700 ring-slate-200",
@@ -25,6 +25,17 @@ export function StatusBadge({ map, code }: { map: Record<string, [string, Tone]>
   if (!code) return <span className="text-slate-400">—</span>;
   const [label, tone] = map[code] ?? [code, "grey"];
   return <Badge tone={tone}>{label}</Badge>;
+}
+
+/** A letter's status and outcome, without saying "held for review" twice. */
+export function LetterBadges({ status, outcome }: { status: string; outcome: string | null }) {
+  const sameThing = status === "awaiting_review" && outcome === "hold_for_staff_review";
+  return (
+    <>
+      <StatusBadge map={LETTER_STATUS} code={status} />
+      {!sameThing && outcome && <StatusBadge map={OUTCOME} code={outcome} />}
+    </>
+  );
 }
 
 export function Card({

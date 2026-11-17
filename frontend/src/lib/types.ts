@@ -23,6 +23,8 @@ export interface Patient {
 export interface PatientListItem extends Patient {
   document_count: number;
   latest_letter_status: string | null;
+  latest_letter_outcome: string | null;
+  pending_items: number;
 }
 
 export interface LockerDocument {
@@ -155,7 +157,21 @@ export interface DashboardStats {
   letters_awaiting_review: number;
   letters_completed: number;
   letters_failed: number;
+  failed_deliveries: number;
+  median_seconds_to_message: number | null;
   patients_with_missing_documents: number;
+}
+
+export interface DeliveryRow {
+  id: string;
+  patient_id: string;
+  patient_code: string;
+  letter_id: string;
+  channel: "whatsapp" | "email";
+  status: string;
+  provider: string;
+  created_at: string;
+  sent_at: string | null;
 }
 
 export interface LetterRow {

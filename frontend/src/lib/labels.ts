@@ -45,10 +45,62 @@ export const OUTCOME: Record<string, [string, Tone]> = {
 };
 
 export const MATCH_STATUS: Record<string, [string, Tone]> = {
-  covered: ["COVERED", "green"],
-  needs_from_patient: ["NEEDS_FROM_PATIENT", "violet"],
-  needs_review: ["NEEDS_REVIEW", "amber"],
+  covered: ["Already in locker", "green"],
+  needs_from_patient: ["Ask the patient", "violet"],
+  needs_review: ["Staff to check", "amber"],
 };
+
+/** Document types every claim usually needs, shown as the locker checklist. */
+export const LOCKER_CHECKLIST: { label: string; codes: string[] }[] = [
+  { label: "Discharge summary", codes: ["discharge_summary"] },
+  { label: "Hospital bill", codes: ["hospital_bill"] },
+  { label: "Pharmacy bills", codes: ["pharmacy_bill"] },
+  { label: "Investigation reports", codes: ["investigation_report"] },
+  { label: "Consultation papers", codes: ["consultation_paper"] },
+  { label: "Policy copy / health card", codes: ["policy_copy", "health_card"] },
+  { label: "KYC", codes: ["kyc_document"] },
+];
+
+/** "discharge_summary__ds.pdf" (category prefix from bulk import) → "ds.pdf". */
+export function displayName(filename: string): string {
+  const cut = filename.indexOf("__");
+  return cut > 0 && CATEGORY_LABEL[filename.slice(0, cut)] ? filename.slice(cut + 2) : filename;
+}
+
+/** Removes the same prefix from file names quoted inside a sentence. */
+export function cleanFileNames(text: string): string {
+  return text.replace(/\b([a-z_]+)__(?=[\w.-]+\.(?:pdf|png|jpe?g)\b)/gi, (whole, prefix: string) =>
+    CATEGORY_LABEL[prefix] ? "" : whole,
+  );
+}
+
+/** "+919812345678" → "+91 98••••5678": enough to recognise, not enough to copy. */
+export function maskPhone(phone: string): string {
+  if (phone.length < 8) return phone;
+  return `${phone.slice(0, 3)} ${phone.slice(3, 5)}••••${phone.slice(-4)}`;
+}
+
+export function formatDuration(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined) return "—";
+  if (seconds < 10) return `${seconds.toFixed(1)} s`;
+  if (seconds < 60) return `${Math.round(seconds)} s`;
+  if (seconds < 3600) {
+    const minutes = Math.floor(seconds / 60);
+    const rest = Math.round(seconds % 60);
+    return rest ? `${minutes} min ${rest} s` : `${minutes} min`;
+  }
+  const hours = Math.floor(seconds / 3600);
+  return `${hours} h ${Math.round((seconds % 3600) / 60)} min`;
+}
+
+export function formatTime(value: string | null | undefined): string {
+  if (!value) return "—";
+  return new Date(value).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+export function secondsBetween(from: string, to: string): number {
+  return Math.max(0, (new Date(to).getTime() - new Date(from).getTime()) / 1000);
+}
 
 export const NOTIFICATION_STATUS: Record<string, [string, Tone]> = {
   queued: ["Queued", "blue"],

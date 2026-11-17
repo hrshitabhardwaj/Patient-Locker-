@@ -24,6 +24,9 @@ class DashboardStats(BaseModel):
     letters_awaiting_review: int
     letters_completed: int
     letters_failed: int
+    failed_deliveries: int
+    # Median seconds from letter upload to the first message sent (letters needing no staff step)
+    median_seconds_to_message: float | None
     patients_with_missing_documents: int
 
 
@@ -95,4 +98,37 @@ def patient_messages(patient_id: uuid.UUID, actor: CurrentUser, request: Request
             message=MessageOut.model_validate(message),
         )
         for message, letter in rows
+    ]
+
+
+class DeliveryRow(BaseModel):
+    id: uuid.UUID
+    patient_id: uuid.UUID
+    patient_code: str
+    letter_id: uuid.UUID
+    channel: str
+    status: str
+    provider: str
+    created_at: datetime
+    sent_at: datetime | None
+
+
+@router.get("/dashboard/deliveries", response_model=list[DeliveryRow])
+def list_deliveries(
+    actor: CurrentUser, db: DbSession, limit: Annotated[int, Query(ge=1, le=50)] = 8
+):
+    """Most recent WhatsApp and email deliveries across visible patients."""
+    return [
+        DeliveryRow(
+            id=notification.id,
+            patient_id=patient.id,
+            patient_code=patient.patient_code,
+            letter_id=notification.query_letter_id,
+            channel=notification.channel.value,
+            status=notification.status.value,
+            provider=notification.provider,
+            created_at=notification.created_at,
+            sent_at=notification.sent_at,
+        )
+        for notification, patient in dashboard.recent_deliveries(db, actor, limit=limit)
     ]

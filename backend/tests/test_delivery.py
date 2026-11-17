@@ -145,3 +145,37 @@ def test_message_text_is_what_was_sent(client, db, make_user, make_patient, name
 
     notification = db.scalar(select(Notification).where(Notification.channel == "whatsapp"))
     assert str(notification.message_id) == letter["current_message"]["id"]
+
+
+def test_dashboard_send_time_deliveries_and_pending_items(client, db, make_user, make_patient):
+    from tests.helpers import login
+
+    letter = _letter(client, db, make_user, make_patient, "letter_01.pdf")
+
+    stats = client.get("/api/v1/dashboard/stats").json()
+    assert stats["failed_deliveries"] == 0
+    assert stats["median_seconds_to_message"] is not None
+    assert stats["median_seconds_to_message"] >= 0
+
+    deliveries = client.get("/api/v1/dashboard/deliveries").json()
+    assert {d["channel"] for d in deliveries} == {"whatsapp", "email"}
+    assert {d["letter_id"] for d in deliveries} == {letter["id"]}
+    assert all(d["status"] == "delivered" for d in deliveries)
+
+    [patient] = client.get("/api/v1/patients").json()["items"]
+    assert patient["latest_letter_outcome"] == "send_missing_items_message"
+    assert patient["pending_items"] == 2
+
+    outsider = make_user()
+    login(client, outsider.email)
+    assert client.get("/api/v1/dashboard/deliveries").json() == []
+    assert client.get("/api/v1/dashboard/stats").json()["median_seconds_to_message"] is None
+
+
+def test_held_letters_are_left_out_of_the_send_time(client, db, make_user, make_patient):
+    _letter(client, db, make_user, make_patient, "letter_02.pdf")
+
+    assert client.get("/api/v1/dashboard/stats").json()["median_seconds_to_message"] is None
+    [patient] = client.get("/api/v1/patients").json()["items"]
+    assert patient["latest_letter_outcome"] == "hold_for_staff_review"
+    assert patient["pending_items"] == 3

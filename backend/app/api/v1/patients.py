@@ -39,8 +39,10 @@ def list_patients(
             **PatientOut.model_validate(patient).model_dump(),
             document_count=count,
             latest_letter_status=status,
+            latest_letter_outcome=outcome,
+            pending_items=pending,
         )
-        for patient, count, status in rows
+        for patient, count, status, outcome, pending in rows
     ]
     return Page[PatientListItem](items=items, total=total, limit=limit, offset=offset)
 

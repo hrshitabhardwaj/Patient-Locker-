@@ -94,6 +94,9 @@ class PatientOut(BaseModel):
 class PatientListItem(PatientOut):
     document_count: int
     latest_letter_status: str | None
+    latest_letter_outcome: str | None = None
+    # Items the latest letter needs from the patient
+    pending_items: int = 0
 
 
 class AssignmentOut(BaseModel):

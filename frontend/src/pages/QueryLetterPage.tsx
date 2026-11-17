@@ -3,6 +3,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import MessageView from "../components/MessageView";
+import Timeline from "../components/Timeline";
 import {
   Badge,
   Button,
@@ -10,6 +11,7 @@ import {
   ErrorBox,
   inputClass,
   Labelled,
+  LetterBadges,
   Notice,
   Spinner,
   StatusBadge,
@@ -17,26 +19,26 @@ import {
 import { api } from "../lib/api";
 import {
   categoryLabel,
+  cleanFileNames,
+  displayName,
   formatDateTime,
   LETTER_IN_PROGRESS,
-  LETTER_STATUS,
   MATCH_STATUS,
-  OUTCOME,
   REVIEW_REASON,
 } from "../lib/labels";
 import type { LockerDocument, QueryLetterDetail, QueryPoint } from "../lib/types";
 
 const OUTCOME_EXPLAINED: Record<string, [string, "violet" | "amber" | "green"]> = {
   send_missing_items_message: [
-    "The patient is asked only for the items marked NEEDS_FROM_PATIENT. Covered items are not requested again.",
+    "The patient is asked only for the items marked “Ask the patient”. Items already in the locker are never requested again.",
     "violet",
   ],
   hold_for_staff_review: [
-    "Held: nothing is sent to the patient until every NEEDS_REVIEW point below has a staff decision. Sending then happens automatically.",
+    "Held for a staff check: nothing is sent until each point marked “Staff to check” has a decision. The message then goes out automatically.",
     "amber",
   ],
   no_additional_documents_required: [
-    "Every requirement is already covered by the locker. The patient is told no further documents are needed.",
+    "Everything the insurer asked for is already in the locker. The patient is told no further documents are needed.",
     "green",
   ],
 };
@@ -86,7 +88,7 @@ function ReviewForm({ point, letter }: { point: QueryPoint; letter: QueryLetterD
           <option value="">Choose the document…</option>
           {supporting.map((d) => (
             <option key={d.id} value={d.id}>
-              {d.original_filename} ({categoryLabel(d.declared_category ?? d.detected_category)})
+              {displayName(d.original_filename)} ({categoryLabel(d.declared_category ?? d.detected_category)})
             </option>
           ))}
         </select>
@@ -143,7 +145,7 @@ function PointCard({ point, letter }: { point: QueryPoint; letter: QueryLetterDe
       {match && !dismissed && (
         <div className="mt-3 space-y-2 text-sm">
           <p className="text-slate-800">
-            {match.explanation}
+            {cleanFileNames(match.explanation)}
             {match.decided_by === "staff" && <Badge tone="blue">Staff decision</Badge>}
           </p>
           {match.evidence.length > 0 && (
@@ -156,7 +158,7 @@ function PointCard({ point, letter }: { point: QueryPoint; letter: QueryLetterDe
                     rel="noreferrer"
                     className="font-semibold text-sky-800 hover:underline"
                   >
-                    {e.filename}
+                    {displayName(e.filename)}
                   </a>
                   {e.page ? ` · page ${e.page}` : ""}
                   {e.kind ? ` · ${e.kind} seen on the page image` : ""}
@@ -338,8 +340,7 @@ export default function QueryLetterPage() {
         </Link>
         <div className="mt-1 flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold">Query from {l.insurer_name ?? "insurer"}</h1>
-          <StatusBadge map={LETTER_STATUS} code={l.status} />
-          <StatusBadge map={OUTCOME} code={l.outcome} />
+          <LetterBadges status={l.status} outcome={l.outcome} />
         </div>
         <p className="mt-1 text-sm text-slate-500">
           {l.claim_reference ? `Claim ${l.claim_reference} · ` : ""}
@@ -350,6 +351,8 @@ export default function QueryLetterPage() {
           </a>
         </p>
       </div>
+
+      <Timeline letter={l} />
 
       {inProgress && (
         <Notice>
@@ -384,9 +387,9 @@ export default function QueryLetterPage() {
         title={`Query points (${l.points.length})`}
         actions={
           <div className="flex flex-wrap gap-1">
-            {counts.covered ? <Badge tone="green">{counts.covered} covered</Badge> : null}
-            {counts.needs_from_patient ? <Badge tone="violet">{counts.needs_from_patient} from patient</Badge> : null}
-            {counts.needs_review ? <Badge tone="amber">{counts.needs_review} need review</Badge> : null}
+            {counts.covered ? <Badge tone="green">{counts.covered} already in locker</Badge> : null}
+            {counts.needs_from_patient ? <Badge tone="violet">{counts.needs_from_patient} to ask the patient</Badge> : null}
+            {counts.needs_review ? <Badge tone="amber">{counts.needs_review} for staff to check</Badge> : null}
           </div>
         }
       >
