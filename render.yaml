@@ -28,9 +28,21 @@ services:
         sync: false
       - key: FILE_STORE
         value: database
-      # Ollama only runs locally; documents are still extracted (with OCR) and classified by rules.
+      # Gemini (free key from Google AI Studio) checks pages for signatures and stamps and
+      # double-checks letter points. Free-tier content may be used by Google to improve its
+      # products. Without a key, everything still runs on rules (signed/stamped requests are
+      # then held for staff review).
       - key: LLM_PROVIDER
-        value: none
+        value: gemini
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-flash-lite-latest
+      - key: GEMINI_REQUESTS_PER_MINUTE
+        value: "10"
+      # Fewer pages per document keeps within the free daily quota.
+      - key: LLM_PROFILE_MAX_PAGES
+        value: "2"
       # WhatsApp through the Twilio sandbox. Recipients must first send the sandbox's
       # "join <code>" message to the sandbox number.
       - key: WHATSAPP_PROVIDER

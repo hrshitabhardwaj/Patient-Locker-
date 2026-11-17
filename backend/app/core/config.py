@@ -67,12 +67,17 @@ class Settings(BaseSettings):
     ocr_dpi: int = 300
 
     # LLM. "none" disables AI profiling; documents are still extracted and classified by rules.
-    llm_provider: Literal["ollama", "anthropic", "none"] = "ollama"
+    llm_provider: Literal["ollama", "gemini", "anthropic", "none"] = "ollama"
     ollama_base_url: str = "http://localhost:11434"
     # The "instruct" variant answers directly; the default qwen3-vl:2b tag is a "thinking"
     # variant that spends its output budget reasoning and ignores requests not to.
     ollama_model: str = "qwen3-vl:2b-instruct"
     llm_timeout_seconds: int = 300
+    # Gemini (hosted). Free-tier limits are small and change; check them in Google AI Studio.
+    gemini_api_key: SecretStr = SecretStr("")
+    gemini_model: str = "gemini-flash-lite-latest"
+    # Calls are spaced to stay under this rate.
+    gemini_requests_per_minute: int = 10
     # Pages sent to the model as images, and their longest side in pixels.
     llm_profile_max_pages: int = 3
     llm_image_max_px: int = 1024

@@ -51,7 +51,7 @@ test:
 
 ## Slow checks against the real local model (Ollama must be running)
 test-llm:
-	cd backend && .venv/bin/pytest -m ollama -s
+	cd backend && LIVE_LLM=$(LIVE_LLM) .venv/bin/pytest -m ollama -s
 
 ## Fictional demo patients (documents + letters) in demo/
 demo-files:

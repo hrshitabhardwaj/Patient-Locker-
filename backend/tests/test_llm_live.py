@@ -1,14 +1,17 @@
-"""Checks against the real local model. Slow; run with `make test-llm` (needs Ollama running).
+"""Checks against a real model. Slow; run with `make test-llm` (needs Ollama running), or
+`make test-llm LIVE_LLM=gemini` (needs GEMINI_API_KEY in .env; uses free-tier quota).
 
 These record how the configured model actually performs on the sample documents. Signature
 and stamp detection on a small local model is a known weak point; the assertions below are the
 minimum the pipeline relies on, and the printed table shows the full picture.
 """
 
+import os
+
 import pytest
 
 from app.ai.document_profile import profile_document
-from app.ai.llm import OllamaClient
+from app.ai.llm import GeminiClient, OllamaClient
 from app.core.config import get_settings
 from app.processing.extraction import extract_pages, render_page_images
 from tests.helpers import SAMPLES
@@ -27,6 +30,13 @@ EXPECTED_MARKS = {
 @pytest.fixture(scope="module")
 def client():
     settings = get_settings()
+    if os.environ.get("LIVE_LLM") == "gemini":
+        return GeminiClient(
+            settings.gemini_api_key.get_secret_value(),
+            settings.gemini_model,
+            120,
+            settings.gemini_requests_per_minute,
+        )
     return OllamaClient(settings.ollama_base_url, settings.ollama_model, 600)
 
 

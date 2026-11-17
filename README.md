@@ -31,7 +31,7 @@ Live WhatsApp and email delivery is **untested** until real Twilio and email cre
 
 Python 3.12 · FastAPI · SQLAlchemy 2 · Alembic · PostgreSQL 16 · Tesseract OCR ·
 React 19 + Vite + TypeScript + Tailwind · LLM behind a switchable interface
-(local Ollama for development, hosted Claude once a company key is available).
+(local Ollama for development, Google Gemini on the hosted service).
 
 ## Local setup (macOS, Homebrew)
 
@@ -368,8 +368,13 @@ reachable *and* at the latest migration; otherwise 503 with `unavailable` or
 
 Limits of the hosted setup:
 - Files are kept in PostgreSQL (`FILE_STORE=database`), so restarts and deploys keep them.
-- No AI model runs on Render (`LLM_PROVIDER=none`). Signature and stamp checks need it, so a
-  letter asking for a signed or stamped document is held for staff review there.
+- AI on Render is Google Gemini (`LLM_PROVIDER=gemini`, `GEMINI_API_KEY` from Google AI Studio).
+  The free tier allows only a few requests per minute and a limited number per day: calls are
+  spaced out, and when the quota runs out documents fall back to rules only (a letter asking
+  for a signed or stamped document is then held for staff review). Load the patients' documents
+  a day before letters arrive to spread the quota. **On the free tier Google may use the
+  content sent (document page images and text) to improve its products**; a paid key avoids
+  that. Check a new key with `make test-llm LIVE_LLM=gemini`.
 - The free plan sleeps after 15 idle minutes; `.github/workflows/keep-awake.yml` pings the
   health check every 10 minutes.
 - Outgoing SMTP is blocked on the free plan: use `EMAIL_PROVIDER=brevo`.
